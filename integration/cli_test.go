@@ -6,6 +6,7 @@ package integration
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -235,6 +236,39 @@ func TestAutoColorAndEveryCommandHelp(t *testing.T) {
 		out, _, _ := command("", name, "--help")
 		if strings.Contains(out, "--require-evidence") != want {
 			t.Fatalf("%s --require-evidence advertised=%t", name, !want)
+		}
+	}
+}
+
+func TestVersionAndMissingNamedCronJob(t *testing.T) {
+	out, _, err := command("", "--version")
+	if err != nil || out != "test\n" {
+		t.Fatalf("version: %v %q", err, out)
+	}
+	f := fixtureData()
+	f.Handle = func(w http.ResponseWriter, r *http.Request) bool {
+		if r.URL.Path != "/apis/batch/v1/namespaces/finance/cronjobs/missing" {
+			return false
+		}
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprint(w, `{"apiVersion":"v1","kind":"Status","status":"Failure","reason":"NotFound","message":"cronjobs.batch \"missing\" not found","code":404}`)
+		return true
+	}
+	config := serveEvidence(t, f, "")
+	for _, args := range [][]string{{"missing"}, {"inspect", "missing"}, {"diagnose", "missing"}, {"logs", "missing"}} {
+		out, notes, err := command("", append(args, "--kubeconfig", config)...)
+		msg := notes
+		if err != nil {
+			msg += err.Error()
+		}
+		if cli.ExitCode(err) != 1 || out != "" || !strings.Contains(msg, "not found") {
+			t.Fatalf("%v: %v %q %q", args, err, out, notes)
+		}
+	}
+	for _, args := range [][]string{{"logs", "ledger"}, {"inspect", "ledger"}} {
+		out, _, err := command("", append(args, "--kubeconfig", config, "-l", "team=nobody")...)
+		if cli.ExitCode(err) != 1 || out != "" {
+			t.Fatalf("%v with a non-matching CronJob selector: %v %s", args, err, out)
 		}
 	}
 }

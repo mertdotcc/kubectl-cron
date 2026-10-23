@@ -634,6 +634,10 @@ func (s *suite) logs(t *testing.T) {
 		return strings.Contains(line, "/slow-active/") && strings.Contains(line, "tick-")
 	})
 	s.stop(t, p)
+	// Without --run, follow selects the latest active Job.
+	active := s.start(t, "logs", "slow", "-f", "--tail=1")
+	active.line(t, func(line string) bool { return strings.Contains(line, "tick-") })
+	s.stop(t, active)
 	var pods corev1.PodList
 	json.Unmarshal([]byte(s.must(s.kn("get", "pods", "-l", "batch.kubernetes.io/job-name=slow-active", "-o", "json")).Out), &pods)
 	if len(pods.Items) != 1 {
