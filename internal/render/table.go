@@ -9,17 +9,6 @@ import (
 	"io"
 	"strings"
 	"text/tabwriter"
-
-	"github.com/fatih/color"
-)
-
-// The colours every surface uses, and the only ones they use. Colour carries
-// meaning here rather than decoration: a fact worth looking at is red, an
-// opinion is yellow, and something that is not configured at all is gray.
-var (
-	red    = color.New(color.FgRed)
-	yellow = color.New(color.FgYellow)
-	gray   = color.New(color.FgHiBlack)
 )
 
 // cell is one table cell: the text that decides how wide its column is, and
@@ -38,29 +27,6 @@ type cell struct {
 // plain is a cell the terminal prints as it is.
 func plain(text string) cell { return cell{text: text} }
 
-// tinted is a cell printed in a colour, and a plain one when colour is off.
-func tinted(text string, c *color.Color) cell {
-	return normalize(cell{text: text, colored: c.Sprint(text)})
-}
-
-// join runs cells together into one, each part keeping its own colour. It is
-// how a probe cell wears a red drift marker on otherwise plain text.
-func join(parts ...cell) cell {
-	var out cell
-	for _, part := range parts {
-		out.text += part.text
-		out.colored += part.print()
-	}
-	return normalize(out)
-}
-
-func normalize(c cell) cell {
-	if c.colored == c.text {
-		c.colored = ""
-	}
-	return c
-}
-
 // print is the cell as it goes to the terminal.
 func (c cell) print() string {
 	if c.colored == "" {
@@ -72,28 +38,10 @@ func (c cell) print() string {
 // table is a grid of cells written through tabwriter, so every column ends up
 // as wide as its widest cell and no wider.
 type table struct {
-	rows []tableRow
+	rows [][]cell
 }
 
-// tableRow is either a row of cells or a line that is printed as it stands.
-type tableRow struct {
-	cells []cell
-	// raw is a line printed verbatim, taking no part in the column widths and
-	// keeping none of its own. It is how the Inspection hangs a probe's latest
-	// failure message under the row that counted it, and how it heads a block
-	// of rows, without either pushing a column out.
-	raw string
-	// literal tells the two apart, because a raw line can legitimately be
-	// empty and a row of no cells cannot.
-	literal bool
-}
-
-func (t *table) add(cells ...cell) { t.rows = append(t.rows, tableRow{cells: cells}) }
-
-// addRaw appends a line printed as it is, between the rows around it.
-func (t *table) addRaw(line string) {
-	t.rows = append(t.rows, tableRow{raw: line, literal: true})
-}
+func (t *table) add(cells ...cell) { t.rows = append(t.rows, cells) }
 
 // Two spaces between columns, as kubectl's own tables have, and no minimum
 // width, so a column of short cells does not take a wide one's room.
@@ -108,18 +56,11 @@ const (
 // Alignment is measured on the uncoloured text and the colour is put back
 // afterwards, line by line: every cell sits at a known offset in the aligned
 // line, because tabwriter pads a cell on the right and never rewrites it.
-//
-// Raw lines never reach tabwriter. A line with no tab in it ends every column
-// block it falls in, so feeding one through would break the alignment of the
-// rows on either side of it, which is the one thing a raw line must not do.
 func (t *table) write(w io.Writer) error {
 	var aligned bytes.Buffer
 	tw := tabwriter.NewWriter(&aligned, columnMinWidth, columnTabWidth, columnPadding, ' ', 0)
 	for _, row := range t.rows {
-		if row.literal {
-			continue
-		}
-		for i, c := range row.cells {
+		for i, c := range row {
 			if i > 0 {
 				fmt.Fprint(tw, "\t")
 			}
@@ -132,17 +73,11 @@ func (t *table) write(w io.Writer) error {
 	}
 
 	lines := strings.SplitAfter(aligned.String(), "\n")
-	next := 0
-	for _, row := range t.rows {
-		line := row.raw + "\n"
-		if !row.literal {
-			if next >= len(lines) {
-				break
-			}
-			line = colorize(lines[next], row.cells)
-			next++
+	for i, row := range t.rows {
+		if i >= len(lines) {
+			break
 		}
-		if _, err := io.WriteString(w, trimRight(line)); err != nil {
+		if _, err := io.WriteString(w, trimRight(colorize(lines[i], row))); err != nil {
 			return err
 		}
 	}
