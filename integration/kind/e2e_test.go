@@ -31,10 +31,10 @@ import (
 )
 
 type suite struct {
-	t                                             *testing.T
-	binary, kubeconfig, context, artifacts, image string
-	ns, other, quota                              string
-	sequence                                      atomic.Int32
+	t                                                   *testing.T
+	binary, kubeconfig, context, artifacts, image, node string
+	ns, other, quota                                    string
+	sequence                                            atomic.Int32
 }
 
 type result struct {
@@ -43,7 +43,7 @@ type result struct {
 }
 
 func TestKindEndToEnd(t *testing.T) {
-	s := &suite{t: t, binary: os.Getenv("KUBECTL_CRON_E2E_BINARY"), kubeconfig: os.Getenv("KUBECTL_CRON_E2E_KUBECONFIG"), context: os.Getenv("KUBECTL_CRON_E2E_CONTEXT"), artifacts: os.Getenv("KUBECTL_CRON_E2E_ARTIFACTS"), image: os.Getenv("KUBECTL_CRON_E2E_IMAGE"), ns: "cron-e2e-main", other: "cron-e2e-other", quota: "cron-e2e-quota"}
+	s := &suite{t: t, binary: os.Getenv("KUBECTL_CRON_E2E_BINARY"), kubeconfig: os.Getenv("KUBECTL_CRON_E2E_KUBECONFIG"), context: os.Getenv("KUBECTL_CRON_E2E_CONTEXT"), artifacts: os.Getenv("KUBECTL_CRON_E2E_ARTIFACTS"), image: os.Getenv("KUBECTL_CRON_E2E_IMAGE"), node: os.Getenv("KUBECTL_CRON_E2E_NODE"), ns: "cron-e2e-main", other: "cron-e2e-other", quota: "cron-e2e-quota"}
 	if s.binary == "" || s.kubeconfig == "" || s.artifacts == "" || !strings.HasPrefix(s.context, "kind-cron-e2e-") {
 		t.Fatal("run via hack/test-kind.sh; an explicit binary, kubeconfig, artifact directory, and isolated kind context are required")
 	}
@@ -66,6 +66,15 @@ func TestKindEndToEnd(t *testing.T) {
 	s.feature(t, "runs", s.runs)
 	s.feature(t, "logs", s.logs)
 	s.feature(t, "diagnose", s.diagnose)
+	s.feature(t, "timeline", s.timeline)
+	s.feature(t, "calendar", s.calendar)
+	s.feature(t, "watch", s.watch)
+	s.feature(t, "access", s.access)
+	s.feature(t, "terminal", s.tty)
+	s.feature(t, "plugin", s.plugin)
+	s.feature(t, "restart", s.restart)
+	// Last, so it covers every request the features above made.
+	s.feature(t, "read-only", s.readOnly)
 }
 
 func (s *suite) feature(t *testing.T, name string, test func(*testing.T)) {
@@ -536,7 +545,11 @@ func (s *suite) start(t *testing.T, args ...string) *runningCLI {
 }
 func (p *runningCLI) line(t *testing.T, match func(string) bool) string {
 	t.Helper()
-	timer := time.NewTimer(15 * time.Second)
+	return p.lineWithin(t, 15*time.Second, match)
+}
+func (p *runningCLI) lineWithin(t *testing.T, limit time.Duration, match func(string) bool) string {
+	t.Helper()
+	timer := time.NewTimer(limit)
 	defer timer.Stop()
 	for {
 		select {
