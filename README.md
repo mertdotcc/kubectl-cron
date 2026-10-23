@@ -139,16 +139,19 @@ Exit 0 means inspection completed, including when invalid configuration was repo
 - Relative `@every` schedules use the last recorded schedule or creation time as their reference point; an offline expression uses the displayed evaluation time. They are nominal previews, not controller catch-up predictions. Missing reference data stays unavailable.
 - The parser has a bounded search horizon. No returned date is reported as “no occurrence found,” rather than proof that a schedule can never match.
 - Status fields and retained resources do not reveal complete execution history. Reports make no complete-run ratios, failure-streak claims, skipped-run totals, or historical suspension durations.
-- The compatibility target is Kubernetes 1.35-1.37. Older `batch/v1` clusters are best effort without a version gate. Automated verification uses saved API data and scheduling cases; use the [local demo](hack/demo-cluster/README.md) for live validation.
+- The compatibility target is Kubernetes 1.35-1.37. Older `batch/v1` clusters are best effort without a version gate. `make check` uses saved API data and scheduling cases; `make e2e` verifies against a live kind cluster, and the [local demo](hack/demo-cluster/README.md) is for exploring by hand.
 
 ## Development
 
 ```sh
 make check
 go test -race ./...
+make e2e
 ```
 
-The fixture pipeline checks collection, analysis, human presentation, and JSON/YAML output. DST and relative-cadence tests use a fixed clock. The screenshot above is rendered from the same recorded fixture output, not a claim about a live cluster.
+The fixture pipeline checks collection, analysis, human presentation, and JSON/YAML output. DST and relative-cadence tests use a fixed clock.
+
+`make e2e` runs `hack/test-kind.sh`, an opt-in suite that needs Go, kind, Docker, kubectl, and python3. It creates a disposable kind cluster with an API audit log, builds the CLI, and runs every command against real CronJobs, Jobs, Pods, and Events, including restricted identities, terminal behavior, and an API server restart. It then checks the audit log for read-only access and deletes the cluster. Command outputs and the audit log are saved to the printed artifact directory; `CRON_E2E_KEEP=1` keeps the cluster for inspection. The screenshot above is rendered from the same recorded fixture output, not a claim about a live cluster.
 
 Read the [glossary](GLOSSARY.md), [v0.1 design](docs/v0.1-design.md), and [ADRs](docs/adr/) before changing domain behavior. The implementation follows the presentation conventions of [kubectl-probes](https://github.com/mertdotcc/kubectl-probes).
 

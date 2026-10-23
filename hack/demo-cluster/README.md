@@ -15,4 +15,4 @@ The minute marker creates a small Job each minute. The parked export is suspende
 
 `make offline` explains the definitions without creating a cluster. Inputs rejected by Kubernetes admission, such as malformed expressions and invalid timezone names, are tested locally rather than submitted as pretend demo workloads.
 
-The demo applies and deletes sample resources when explicitly invoked. The plugin's Overview, calendar, and watch read only CronJobs; richer commands also read related evidence and logs. Automated tests use fixtures and local HTTP servers; they do not start Docker or mutate a cluster.
+The demo applies and deletes sample resources when explicitly invoked. The plugin's Overview, calendar, and watch read only CronJobs; richer commands also read related evidence and logs. `make check` uses fixtures and local HTTP servers; it does not start Docker or mutate a cluster. The opt-in `make e2e` suite creates and deletes its own isolated cluster and never touches this demo.
